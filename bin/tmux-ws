@@ -1,0 +1,429 @@
+#!/bin/bash
+# tmux-ws — tmux workspace manager
+# Create, manage, and script tmux workspaces from config files.
+
+set -euo pipefail
+
+VERSION="0.1.0"
+CONFIG_DIR="${TMUX_WS_CONFIG:-$HOME/.config/tmux-ws}"
+SCRIPT_NAME="tmux-ws"
+
+# --- Colors ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# --- Usage ---
+usage() {
+    cat <<EOF
+${BOLD}$SCRIPT_NAME${NC} — tmux workspace manager
+
+${BOLD}Usage:${NC}
+  $SCRIPT_NAME create <name> [--detach|-d]  Create and attach to a workspace
+  $SCRIPT_NAME list                         List available and running workspaces
+  $SCRIPT_NAME kill <name>                  Kill a workspace session
+  $SCRIPT_NAME edit <name>                  Open workspace config in \$EDITOR
+  $SCRIPT_NAME init                         Create config directory structure
+  $SCRIPT_NAME help                         Show this help
+
+${BOLD}Options:${NC}
+  --detach, -d    Create workspace without attaching
+  --force, -f     Kill existing session before creating
+
+${BOLD}Config:${NC}
+  $CONFIG_DIR/<name>/workspace.conf
+  $CONFIG_DIR/_templates/default.conf    Base template (auto-inherited)
+
+${BOLD}Config format:${NC}
+  # workspace.conf — EXECUTED as shell code. Do not untrusted sources.
+  _BASE="default"
+  DEFAULT_DIR="\$HOME/projects/myapp"
+  WINDOWS=(
+    "editor::vim"
+    "server::npm run dev"
+    "logs::tail -f /var/log/app.log"
+    "scratch::"
+  )
+EOF
+}
+
+# --- Logging ---
+info()  { echo -e "${GREEN}✓${NC} $*"; }
+warn()  { echo -e "${YELLOW}!${NC} $*"; }
+error() { echo -e "${RED}✗${NC} $*" >&2; }
+header() { echo -e "\n${BOLD}$*${NC}"; }
+
+# --- Cleanup ---
+# Tracks tmux sessions created during this run for cleanup on failure
+_CREATED_SESSIONS=()
+
+cleanup() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 && ${#_CREATED_SESSIONS[@]} -gt 0 ]]; then
+        warn "Script failed (exit $exit_code). Cleaning up partial sessions..."
+        for session in "${_CREATED_SESSIONS[@]}"; do
+            if tmux has-session -t "$session" 2>/dev/null; then
+                tmux kill-session -t "$session" 2>/dev/null || true
+                warn "Killed session '$session'"
+            fi
+        done
+    fi
+}
+trap cleanup EXIT
+
+# --- Validation ---
+validate_window_entry() {
+    local entry="$1"
+    local index="$2"
+    local workspace="$3"
+
+    # Count colons — need at least 2 (name:dir:cmd)
+    local colon_count="${entry//[^:]}"
+    if [[ ${#colon_count} -lt 2 ]]; then
+        error "Window #$index in '$workspace' has invalid format: '$entry'"
+        error "  Expected format: \"name:directory:command\""
+        error "  Example:          \"editor::vim\""
+        exit 1
+    fi
+}
+
+validate_dir() {
+    local dir="$1"
+    local context="$2"
+    dir="${dir/#\~/$HOME}"
+    if [[ -n "$dir" && ! -d "$dir" ]]; then
+        warn "$context: directory '$dir' does not exist"
+    fi
+}
+
+# --- Config Loading ---
+load_config() {
+    local name="$1"
+    local config_dir="$CONFIG_DIR/$name"
+    local config_file="$config_dir/workspace.conf"
+
+    if [[ ! -f "$config_file" ]]; then
+        error "Workspace '$name' not found at $config_file"
+        echo "  Available workspaces:"
+        for d in "$CONFIG_DIR"/*/; do
+            [[ ! -f "$d/workspace.conf" ]] && continue
+            local n
+            n=$(basename "$d")
+            [[ "$n" == _* ]] && continue
+            echo "    $n"
+        done
+        exit 1
+    fi
+
+    # Reset workspace variables
+    WINDOWS=()
+    DEFAULT_DIR="$HOME"
+    _BASE=""
+
+    # Source the config file (configs are executable shell code)
+    source "$config_file"
+
+    # Inherit from base template if _BASE is set
+    if [[ -n "$_BASE" ]]; then
+        local base_file="$CONFIG_DIR/_templates/${_BASE}.conf"
+        if [[ -f "$base_file" ]]; then
+            # Save workspace values
+            local ws_windows=("${WINDOWS[@]+"${WINDOWS[@]}"}")
+            local ws_default="$DEFAULT_DIR"
+
+            # Source template to get its values
+            WINDOWS=()
+            DEFAULT_DIR="$HOME"
+            source "$base_file"
+            local tmpl_windows=("${WINDOWS[@]+"${WINDOWS[@]}"}")
+            local tmpl_default="$DEFAULT_DIR"
+
+            # Workspace values take precedence
+            WINDOWS=("${ws_windows[@]+"${ws_windows[@]}"}")
+            DEFAULT_DIR="$ws_default"
+
+            # If workspace didn't define windows, use template's
+            if [[ ${#WINDOWS[@]} -eq 0 && ${#tmpl_windows[@]} -gt 0 ]]; then
+                WINDOWS=("${tmpl_windows[@]}")
+            fi
+
+            # If workspace didn't override default dir, use template's
+            if [[ "$DEFAULT_DIR" == "$HOME" && "$tmpl_default" != "$HOME" ]]; then
+                DEFAULT_DIR="$tmpl_default"
+            fi
+        else
+            error "Base template '$_BASE' not found at $base_file"
+            error "  Create it with: $SCRIPT_NAME init"
+            exit 1
+        fi
+    fi
+
+    # Validate windows defined
+    if [[ ${#WINDOWS[@]} -eq 0 ]]; then
+        error "No windows defined in workspace '$name'"
+        exit 1
+    fi
+
+    # Validate window entry format
+    for ((i=0; i<${#WINDOWS[@]}; i++)); do
+        validate_window_entry "${WINDOWS[$i]}" "$((i+1))" "$name"
+    done
+
+    # Validate DEFAULT_DIR exists
+    validate_dir "$DEFAULT_DIR" "DEFAULT_DIR for '$name'"
+}
+
+# --- Hooks ---
+run_hooks() {
+    local hook_type="$1"
+    local name="$2"
+    local hook_file="$CONFIG_DIR/$name/hooks/${hook_type}.sh"
+
+    if [[ -f "$hook_file" ]]; then
+        info "Running $hook_type hook..."
+        chmod +x "$hook_file"
+        # Run in subshell to prevent hooks from corrupting script state
+        if ! ( source "$hook_file" ); then
+            error "$hook_type hook failed: $hook_file"
+            exit 1
+        fi
+    fi
+}
+
+# --- Window Parsing ---
+# Parses "name:dir:cmd" into win_name, win_dir, win_cmd globals
+parse_window_entry() {
+    local entry="$1"
+    win_name=$(echo "$entry" | cut -d: -f1)
+    win_dir=$(echo "$entry" | cut -d: -f2)
+    win_cmd=$(echo "$entry" | cut -d: -f3-)
+
+    [[ -z "$win_name" ]] && win_name="shell" || true
+    [[ -z "$win_dir" ]] && win_dir="$DEFAULT_DIR" || true
+    win_dir="${win_dir/#\~/$HOME}"
+    [[ -z "$win_cmd" ]] && win_cmd="$SHELL" || true
+}
+
+# --- Core Commands ---
+cmd_create() {
+    local name=""
+    local detach=false
+    local force=false
+
+    # Parse args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --detach|-d) detach=true; shift ;;
+            --force|-f)  force=true; shift ;;
+            -*)          error "Unknown option: $1"; usage; exit 1 ;;
+            *)           name="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$name" ]]; then
+        error "Workspace name required"
+        usage
+        exit 1
+    fi
+
+    # Load config
+    load_config "$name"
+
+    # Check if session already exists
+    if tmux has-session -t "$name" 2>/dev/null; then
+        if [[ "$force" == true ]]; then
+            warn "Killing existing session '$name'"
+            tmux kill-session -t "$name"
+        else
+            info "Session '$name' already exists"
+            if [[ "$detach" == true ]]; then
+                echo "  Attach with: tmux attach -t $name"
+            else
+                tmux attach -t "$name"
+            fi
+            return
+        fi
+    fi
+
+    # Run pre-create hooks
+    run_hooks "pre-create" "$name"
+
+    # Create session with first window
+    local win_name win_dir win_cmd
+    parse_window_entry "${WINDOWS[0]}"
+
+    tmux new-session -d -s "$name" -n "$win_name" -c "$win_dir"
+    _CREATED_SESSIONS+=("$name")
+
+    if [[ -n "$win_cmd" && "$win_cmd" != "$SHELL" ]]; then
+        tmux send-keys -t "$name:0" "$win_cmd" Enter
+    fi
+
+    # Create remaining windows
+    for ((i=1; i<${#WINDOWS[@]}; i++)); do
+        parse_window_entry "${WINDOWS[$i]}"
+
+        tmux new-window -t "$name:$i" -n "$win_name" -c "$win_dir"
+        if [[ -n "$win_cmd" && "$win_cmd" != "$SHELL" ]]; then
+            tmux send-keys -t "$name:$i" "$win_cmd" Enter
+        fi
+    done
+
+    # Select first window
+    tmux select-window -t "$name:0"
+
+    # Run post-create hooks
+    run_hooks "post-create" "$name"
+
+    info "Workspace '$name' created with ${#WINDOWS[@]} windows"
+
+    # Attach or report
+    if [[ "$detach" == true ]]; then
+        echo "  Attach with: tmux attach -t $name"
+    else
+        tmux attach -t "$name"
+    fi
+}
+
+cmd_list() {
+    header "Available workspaces"
+    local count=0
+    for dir in "$CONFIG_DIR"/*/; do
+        [[ ! -f "$dir/workspace.conf" ]] && continue
+        local name
+        name=$(basename "$dir")
+        [[ "$name" == _* ]] && continue
+        local running=""
+        if tmux has-session -t "$name" 2>/dev/null; then
+            running=" ${GREEN}(running)${NC}"
+        fi
+        echo -e "  ${BOLD}$name${NC}$running"
+        count=$((count + 1))
+    done
+    [[ $count -eq 0 ]] && echo "  (none found in $CONFIG_DIR)"
+
+    header "Running sessions"
+    local sessions
+    sessions=$(tmux list-sessions 2>/dev/null || true)
+    if [[ -n "$sessions" ]]; then
+        echo "$sessions" | sed 's/^/  /'
+    else
+        echo "  (none)"
+    fi
+}
+
+cmd_kill() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        error "Workspace name required"
+        exit 1
+    fi
+
+    if tmux has-session -t "$name" 2>/dev/null; then
+        tmux kill-session -t "$name"
+        info "Session '$name' killed"
+    else
+        warn "Session '$name' is not running"
+    fi
+}
+
+cmd_edit() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        error "Workspace name required"
+        exit 1
+    fi
+
+    local config_file="$CONFIG_DIR/$name/workspace.conf"
+    if [[ ! -f "$config_file" ]]; then
+        error "Workspace '$name' not found"
+        exit 1
+    fi
+
+    "${EDITOR:-vim}" "$config_file"
+}
+
+cmd_init() {
+    if [[ -d "$CONFIG_DIR" ]] && [[ "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
+        warn "Config directory already exists at $CONFIG_DIR"
+        return
+    fi
+
+    mkdir -p "$CONFIG_DIR/_templates"
+    mkdir -p "$CONFIG_DIR/_examples/hooks"
+
+    # Create default template
+    cat > "$CONFIG_DIR/_templates/default.conf" <<'TMPL'
+# Default template — inherited by all workspaces that set _BASE="default"
+# Customize this to match your common workflow.
+
+DEFAULT_DIR="$HOME"
+
+WINDOWS=(
+    "shell::"
+)
+TMPL
+
+    # Create example workspace
+    cat > "$CONFIG_DIR/_examples/workspace.conf" <<'EX'
+# Example workspace config
+# Copy this directory to create a new workspace:
+#   cp -r ~/.config/tmux-ws/_examples ~/.config/tmux-ws/myproject
+
+_BASE="default"
+DEFAULT_DIR="$HOME/projects/example"
+
+WINDOWS=(
+    "editor::vim"
+    "server::npm run dev"
+    "logs::tail -f /var/log/app.log"
+    "shell::"
+)
+EX
+
+    cat > "$CONFIG_DIR/_examples/hooks/pre-create.sh" <<'HOOK'
+#!/bin/bash
+# Runs before the tmux session is created.
+# Use this to start services, check prerequisites, etc.
+
+echo "Pre-create: checking environment..."
+HOOK
+
+    cat > "$CONFIG_DIR/_examples/hooks/post-create.sh" <<'HOOK'
+#!/bin/bash
+# Runs after the tmux session is created.
+# Use this to wait for services, open URLs, send notifications, etc.
+
+echo "Post-create: workspace ready!"
+HOOK
+
+    info "Created config directory at $CONFIG_DIR"
+    echo "  Edit $CONFIG_DIR/_templates/default.conf to set your base template"
+    echo "  Copy _examples/ to create a new workspace"
+}
+
+# --- Main ---
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 0
+    fi
+
+    local command="$1"
+    shift
+
+    case "$command" in
+        create)  cmd_create "$@" ;;
+        list)    cmd_list ;;
+        kill)    cmd_kill "$@" ;;
+        edit)    cmd_edit "$@" ;;
+        init)    cmd_init ;;
+        help|-h|--help) usage ;;
+        version|-v|--version) echo "$SCRIPT_NAME $VERSION" ;;
+        *)       error "Unknown command: $command"; usage; exit 1 ;;
+    esac
+}
+
+main "$@"
