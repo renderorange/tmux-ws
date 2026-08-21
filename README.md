@@ -209,3 +209,7 @@ config/                  Default config files
     └── hooks/           Example hooks
 install.sh               Installation script
 ```
+
+## License and Copyright
+
+`tmux-ws` is Copyright (c) 2026 Blaine Motsinger under the MIT license.
