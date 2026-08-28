@@ -1,9 +1,6 @@
-.PHONY: test test-verbose install clean
+.PHONY: test install clean
 
 test:
-	@bats tests/
-
-test-verbose:
 	@bats -t tests/
 
 install:
