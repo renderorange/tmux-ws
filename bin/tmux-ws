@@ -17,36 +17,36 @@ NC='\033[0m'
 
 # --- Usage ---
 usage() {
-    cat <<EOF
-${BOLD}$SCRIPT_NAME${NC} — tmux workspace manager
-
-${BOLD}Usage:${NC}
-  $SCRIPT_NAME create <name> [--detach|-d]  Create and attach to a workspace
-  $SCRIPT_NAME list                         List available and running workspaces
-  $SCRIPT_NAME kill <name>                  Kill a workspace session
-  $SCRIPT_NAME edit <name>                  Open workspace config in \$EDITOR
-  $SCRIPT_NAME init                         Create config directory structure
-  $SCRIPT_NAME help                         Show this help
-
-${BOLD}Options:${NC}
-  --detach, -d    Create workspace without attaching
-  --force, -f     Kill existing session before creating
-
-${BOLD}Config:${NC}
-  $CONFIG_DIR/<name>/workspace.conf
-  $CONFIG_DIR/_templates/default.conf    Base template (auto-inherited)
-
-${BOLD}Config format:${NC}
-  # workspace.conf — EXECUTED as shell code. Do not untrusted sources.
-  _BASE="default"
-  DEFAULT_DIR="\$HOME/projects/myapp"
-  WINDOWS=(
-    "editor::vim"
-    "server::npm run dev"
-    "logs::tail -f /var/log/app.log"
-    "scratch::"
-  )
-EOF
+    echo -e "${BOLD}$SCRIPT_NAME${NC} — tmux workspace manager"
+    echo -e ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo -e "  $SCRIPT_NAME create <name> [--detach|-d]  Create and attach to a workspace"
+    echo -e "  $SCRIPT_NAME attach <name>               Attach to a running workspace"
+    echo -e "  $SCRIPT_NAME list                         List available and running workspaces"
+    echo -e "  $SCRIPT_NAME kill <name>                  Kill a workspace session"
+    echo -e "  $SCRIPT_NAME edit <name>                  Open workspace config in \$EDITOR"
+    echo -e "  $SCRIPT_NAME init                         Create config directory structure"
+    echo -e "  $SCRIPT_NAME version                      Show version"
+    echo -e "  $SCRIPT_NAME help                         Show this help"
+    echo -e ""
+    echo -e "${BOLD}Options:${NC}"
+    echo -e "  --detach, -d    Create workspace without attaching"
+    echo -e "  --force, -f     Kill existing session before creating"
+    echo -e ""
+    echo -e "${BOLD}Config:${NC}"
+    echo -e "  $CONFIG_DIR/<name>/workspace.conf"
+    echo -e "  $CONFIG_DIR/_templates/default.conf    Base template (auto-inherited)"
+    echo -e ""
+    echo -e "${BOLD}Config format:${NC}"
+    echo -e "  # workspace.conf — EXECUTED as shell code. Do not untrusted sources."
+    echo -e "  _BASE=\"default\""
+    echo -e "  DEFAULT_DIR=\"\$HOME/projects/myapp\""
+    echo -e "  WINDOWS=("
+    echo -e "    \"editor::vim\""
+    echo -e "    \"server::npm run dev\""
+    echo -e "    \"logs::tail -f /var/log/app.log\""
+    echo -e "    \"scratch::\""
+    echo -e "  )"
 }
 
 # --- Logging ---
@@ -345,6 +345,22 @@ cmd_edit() {
     "${EDITOR:-vim}" "$config_file"
 }
 
+cmd_attach() {
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        error "Workspace name required"
+        exit 1
+    fi
+
+    if ! tmux has-session -t "$name" 2>/dev/null; then
+        error "Session '$name' is not running"
+        echo "  Create it with: $SCRIPT_NAME create $name"
+        exit 1
+    fi
+
+    tmux attach -t "$name"
+}
+
 cmd_init() {
     if [[ -d "$CONFIG_DIR" ]] && [[ "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]]; then
         warn "Config directory already exists at $CONFIG_DIR"
@@ -416,6 +432,7 @@ main() {
 
     case "$command" in
         create)  cmd_create "$@" ;;
+        attach)  cmd_attach "$@" ;;
         list)    cmd_list ;;
         kill)    cmd_kill "$@" ;;
         edit)    cmd_edit "$@" ;;
