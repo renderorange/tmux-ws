@@ -40,6 +40,9 @@ tmux-ws create project
 # Create in background, stay in current shell
 tmux-ws create project --detach
 
+# Attach to a running workspace
+tmux-ws attach project
+
 # List what's available and what's running
 tmux-ws list
 
@@ -145,11 +148,10 @@ Directories starting with `_` (like `_templates`, `_examples`) are hidden from `
 ## Testing
 
 ```bash
-make test          # run test suite
-make test-verbose  # run with trace output
+make test
 ```
 
-Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, create, inheritance, hooks, validation, kill, edit, and init.
+Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, create, inheritance, hooks, validation, kill, attach, edit, and init.
 
 ## tmux Configuration
 

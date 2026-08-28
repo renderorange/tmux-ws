@@ -54,6 +54,39 @@ else
     warn "No .bashrc or .zshrc found — add $BIN_DIR to your PATH manually"
 fi
 
+# Install shell completions
+COMPLETIONS_SRC="$SCRIPT_DIR/completions"
+
+# Bash completion
+if [[ -f "$HOME/.bashrc" ]]; then
+    if ! grep -qF "tmux-ws.bash" "$HOME/.bashrc" 2>/dev/null; then
+        echo "" >> "$HOME/.bashrc"
+        echo "# tmux-ws completion" >> "$HOME/.bashrc"
+        echo "source \"$COMPLETIONS_SRC/tmux-ws.bash\"" >> "$HOME/.bashrc"
+        info "Bash completion added to ~/.bashrc"
+    else
+        warn "Bash completion already configured in ~/.bashrc"
+    fi
+fi
+
+# Zsh completion
+if [[ -f "$HOME/.zshrc" ]]; then
+    ZSH_COMPLETIONS_DIR="$HOME/.zsh/completions"
+    mkdir -p "$ZSH_COMPLETIONS_DIR"
+    cp "$COMPLETIONS_SRC/tmux-ws.zsh" "$ZSH_COMPLETIONS_DIR/_tmux-ws"
+    info "Zsh completion installed to $ZSH_COMPLETIONS_DIR"
+
+    if ! grep -qF "zsh/completions" "$HOME/.zshrc" 2>/dev/null; then
+        echo "" >> "$HOME/.zshrc"
+        echo "# tmux-ws completion" >> "$HOME/.zshrc"
+        echo "fpath=($ZSH_COMPLETIONS_DIR \$fpath)" >> "$HOME/.zshrc"
+        echo "autoload -Uz compinit && compinit" >> "$HOME/.zshrc"
+        info "Zsh completion configured in ~/.zshrc"
+    else
+        warn "Zsh fpath already configured in ~/.zshrc"
+    fi
+fi
+
 # Make script executable
 chmod +x "$BIN_DIR/tmux-ws"
 
