@@ -21,7 +21,8 @@ source ~/.bashrc  # or source ~/.zshrc
 ## Usage
 
 ```
-tmux-ws create <name> [--detach|-d]   Create and attach to a workspace
+tmux-ws create <name> [--detach|-d] [--force|-f]  Create and attach to a workspace
+tmux-ws attach <name>                 Attach to a running workspace
 tmux-ws list                          List available and running workspaces
 tmux-ws kill <name>                   Kill a workspace session
 tmux-ws edit <name>                   Open workspace config in $EDITOR

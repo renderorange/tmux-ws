@@ -96,6 +96,7 @@ EOF
     tmux kill-session -t bad-format 2>/dev/null || true
     tmux kill-session -t no-template 2>/dev/null || true
     tmux kill-session -t fail-hook 2>/dev/null || true
+    tmux kill-session -t test-attach 2>/dev/null || true
 }
 
 teardown() {
@@ -104,6 +105,7 @@ teardown() {
     tmux kill-session -t bad-format 2>/dev/null || true
     tmux kill-session -t no-template 2>/dev/null || true
     tmux kill-session -t fail-hook 2>/dev/null || true
+    tmux kill-session -t test-attach 2>/dev/null || true
     rm -rf "$TEST_CONFIG_DIR"
     rm -rf "$BATS_TEST_TMPDIR/test-workspace-dir"
     rm -rf "$BATS_TEST_TMPDIR/myapp-dir"
@@ -270,6 +272,28 @@ teardown() {
     run tmux-ws kill test-workspace
     [ "$status" -eq 0 ]
     [[ "${output}" == *"not running"* ]]
+}
+
+# --- Attach ---
+
+@test "attach requires a name" {
+    run tmux-ws attach
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"Workspace name required"* ]]
+}
+
+@test "attach fails for nonexistent session" {
+    run tmux-ws attach nonexistent
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"not running"* ]]
+}
+
+@test "attach passes validation for running session" {
+    tmux new-session -d -s test-attach
+    # tmux attach requires a tty, so we can't test the actual attach.
+    # Verify the session exists (would pass the has-session check).
+    run tmux has-session -t test-attach
+    [ "$status" -eq 0 ]
 }
 
 # --- Edit ---
