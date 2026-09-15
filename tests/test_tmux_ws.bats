@@ -90,6 +90,24 @@ echo "this hook fails" >&2
 exit 1
 EOF
 
+    # Create mock binaries for install.sh tests
+    mkdir -p "$BATS_TEST_TMPDIR/fake-bin"
+    cat > "$BATS_TEST_TMPDIR/fake-bin/tmux" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$BATS_TEST_TMPDIR/fake-bin/tmux"
+
+    cat > "$BATS_TEST_TMPDIR/fake-bin/git" <<'EOF'
+#!/bin/bash
+if [[ "$1" == "clone" ]]; then
+    mkdir -p "$3"
+    exit 0
+fi
+exit 0
+EOF
+    chmod +x "$BATS_TEST_TMPDIR/fake-bin/git"
+
     # Clean up any leftover sessions
     tmux kill-session -t test-workspace 2>/dev/null || true
     tmux kill-session -t myapp 2>/dev/null || true
