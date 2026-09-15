@@ -93,6 +93,15 @@ else
     warn "Plugin config already present in $TMUX_CONF"
 fi
 
+# Install TPM plugins
+if [[ -x "$TPM_DIR/bin/install_plugins" ]]; then
+    tmux start-server \; set-environment -g TMUX_PLUGIN_MANAGER_PATH "$HOME/.tmux/plugins/" 2>/dev/null
+    "$TPM_DIR/bin/install_plugins" >/dev/null 2>&1
+    info "TPM plugins installed"
+else
+    warn "TPM installer not found — run manually: ~/.tmux/plugins/tpm/bin/install_plugins"
+fi
+
 # Install shell completions
 COMPLETIONS_SRC="$SCRIPT_DIR/completions"
 
