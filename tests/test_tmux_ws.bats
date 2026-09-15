@@ -90,24 +90,6 @@ echo "this hook fails" >&2
 exit 1
 EOF
 
-    # Create mock binaries for install.sh tests
-    mkdir -p "$BATS_TEST_TMPDIR/fake-bin"
-    cat > "$BATS_TEST_TMPDIR/fake-bin/tmux" <<'EOF'
-#!/bin/bash
-exit 0
-EOF
-    chmod +x "$BATS_TEST_TMPDIR/fake-bin/tmux"
-
-    cat > "$BATS_TEST_TMPDIR/fake-bin/git" <<'EOF'
-#!/bin/bash
-if [[ "$1" == "clone" ]]; then
-    mkdir -p "$3"
-    exit 0
-fi
-exit 0
-EOF
-    chmod +x "$BATS_TEST_TMPDIR/fake-bin/git"
-
     # Clean up any leftover sessions
     tmux kill-session -t test-workspace 2>/dev/null || true
     tmux kill-session -t myapp 2>/dev/null || true
@@ -348,16 +330,36 @@ teardown() {
 
 # --- TPM Install ---
 
+setup_mock_bin() {
+    mkdir -p "$BATS_TEST_TMPDIR/fake-bin"
+    cat > "$BATS_TEST_TMPDIR/fake-bin/tmux" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "$BATS_TEST_TMPDIR/fake-bin/tmux"
+
+    cat > "$BATS_TEST_TMPDIR/fake-bin/git" <<'EOF'
+#!/bin/bash
+if [[ "$1" == "clone" ]]; then
+    mkdir -p "$3"
+    exit 0
+fi
+exit 0
+EOF
+    chmod +x "$BATS_TEST_TMPDIR/fake-bin/git"
+}
+
 @test "install clones TPM" {
+    setup_mock_bin
     export HOME="$BATS_TEST_TMPDIR/home"
     mkdir -p "$HOME"
-    # Run install.sh with mocked tmux
     run bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'"
     [ "$status" -eq 0 ]
     [ -d "$HOME/.tmux/plugins/tpm" ]
 }
 
 @test "install patches .tmux.conf" {
+    setup_mock_bin
     export HOME="$BATS_TEST_TMPDIR/home"
     mkdir -p "$HOME"
     run bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'"
@@ -369,6 +371,7 @@ teardown() {
 }
 
 @test "install is idempotent" {
+    setup_mock_bin
     export HOME="$BATS_TEST_TMPDIR/home"
     mkdir -p "$HOME"
     # Run twice
