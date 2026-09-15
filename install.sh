@@ -54,6 +54,54 @@ else
     warn "No .bashrc or .zshrc found — add $BIN_DIR to your PATH manually"
 fi
 
+# --- TPM & Plugins ---
+TPM_DIR="$HOME/.tmux/plugins/tpm"
+
+# Clone TPM if not present
+if [[ ! -d "$TPM_DIR" ]]; then
+    git clone https://github.com/tmux-plugins/tpm "$TPM_DIR" 2>/dev/null
+    info "TPM installed to $TPM_DIR"
+else
+    warn "TPM already installed at $TPM_DIR"
+fi
+
+TMUX_CONF="$HOME/.tmux.conf"
+
+# Create .tmux.conf if it doesn't exist
+if [[ ! -f "$TMUX_CONF" ]]; then
+    touch "$TMUX_CONF"
+    info "Created $TMUX_CONF"
+fi
+
+# Patch .tmux.conf with plugin declarations
+if ! grep -qF "tmux-plugins/tpm" "$TMUX_CONF" 2>/dev/null; then
+    # Remove any existing run tpm line to re-add at end
+    sed -i '/run.*tpm\/tpm/d' "$TMUX_CONF"
+
+    # Append plugin block
+    cat >> "$TMUX_CONF" <<'EOF'
+
+# tmux plugins (added by tmux-ws install)
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+set -g @plugin 'tmux-plugins/tmux-continuum'
+set -g @continuum-restore 'on'
+run '~/.tmux/plugins/tpm/tpm'
+EOF
+    info "Plugin config added to $TMUX_CONF"
+else
+    warn "Plugin config already present in $TMUX_CONF"
+fi
+
+# Install TPM plugins
+if [[ -x "$TPM_DIR/bin/install_plugins" ]]; then
+    tmux start-server \; set-environment -g TMUX_PLUGIN_MANAGER_PATH "$HOME/.tmux/plugins/" 2>/dev/null
+    "$TPM_DIR/bin/install_plugins" >/dev/null 2>&1
+    info "TPM plugins installed"
+else
+    warn "TPM installer not found — run manually: ~/.tmux/plugins/tpm/bin/install_plugins"
+fi
+
 # Install shell completions
 COMPLETIONS_SRC="$SCRIPT_DIR/completions"
 
