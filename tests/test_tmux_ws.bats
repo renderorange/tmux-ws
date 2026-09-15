@@ -327,3 +327,38 @@ teardown() {
     [ "$status" -eq 0 ]
     [[ "${output}" == *"already exists"* ]]
 }
+
+# --- TPM Install ---
+
+@test "install clones TPM" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME"
+    # Run install.sh with mocked tmux
+    run bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'"
+    [ "$status" -eq 0 ]
+    [ -d "$HOME/.tmux/plugins/tpm" ]
+}
+
+@test "install patches .tmux.conf" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME"
+    run bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'"
+    [ "$status" -eq 0 ]
+    grep -qF "tmux-plugins/tpm" "$HOME/.tmux.conf"
+    grep -qF "tmux-resurrect" "$HOME/.tmux.conf"
+    grep -qF "tmux-continuum" "$HOME/.tmux.conf"
+    grep -qF "continuum-restore" "$HOME/.tmux.conf"
+}
+
+@test "install is idempotent" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$HOME"
+    # Run twice
+    bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'" >/dev/null 2>&1
+    run bash -c "export HOME='$HOME'; export TMUX_WS_CONFIG='$HOME/.config/tmux-ws'; PATH='$BATS_TEST_TMPDIR/fake-bin:$PATH' bash '$BATS_TEST_DIRNAME/../install.sh'"
+    [ "$status" -eq 0 ]
+    # Count plugin declarations — should be exactly 1
+    local count
+    count=$(grep -cF "tmux-plugins/tpm" "$HOME/.tmux.conf")
+    [ "$count" -eq 1 ]
+}
