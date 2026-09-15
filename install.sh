@@ -54,6 +54,17 @@ else
     warn "No .bashrc or .zshrc found — add $BIN_DIR to your PATH manually"
 fi
 
+# --- TPM & Plugins ---
+TPM_DIR="$HOME/.tmux/plugins/tpm"
+
+# Clone TPM if not present
+if [[ ! -d "$TPM_DIR" ]]; then
+    git clone https://github.com/tmux-plugins/tpm "$TPM_DIR" 2>/dev/null
+    info "TPM installed to $TPM_DIR"
+else
+    warn "TPM already installed at $TPM_DIR"
+fi
+
 # Install shell completions
 COMPLETIONS_SRC="$SCRIPT_DIR/completions"
 
