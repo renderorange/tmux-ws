@@ -1,0 +1,2 @@
+#!/bin/bash
+echo -n "load $(cut -d' ' -f1-3 /proc/loadavg)"

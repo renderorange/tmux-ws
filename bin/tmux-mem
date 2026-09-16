@@ -1,0 +1,2 @@
+#!/bin/bash
+echo -n "mem $(free -h | sed -n 's/^Mem:[[:space:]]*\([0-9.]*[A-Za-z]*\)[[:space:]]*\([0-9.]*[A-Za-z]*\).*/\2\/\1/p')"

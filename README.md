@@ -50,6 +50,21 @@ tmux-ws list
 tmux-ws kill project
 ```
 
+## tmux Status Plugins
+
+Two lightweight status bar plugins are included in `bin/`:
+
+- **tmux-load** — displays system load average
+- **tmux-mem** — displays memory usage (used/total)
+
+Add them to your `~/.tmux.conf` status line:
+
+```
+set -g status-right "#(tmux-load) #(tmux-mem) %H:%M"
+```
+
+After install, both commands are available in your PATH.
+
 ## Config
 
 Workspace configs live in `~/.config/tmux-ws/`. Each workspace is a directory with a `workspace.conf` file and optional `hooks/` directory.
