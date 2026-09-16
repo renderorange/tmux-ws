@@ -135,8 +135,10 @@ if [[ -f "$HOME/.zshrc" ]]; then
     fi
 fi
 
-# Make script executable
+# Make scripts executable
 chmod +x "$BIN_DIR/tmux-ws"
+chmod +x "$BIN_DIR/tmux-load"
+chmod +x "$BIN_DIR/tmux-mem"
 
 echo ""
 info "Installed! Reload your shell:"
