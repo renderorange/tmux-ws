@@ -174,7 +174,7 @@ Or copy an existing workspace manually:
 make test
 ```
 
-Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, create, inheritance, hooks, validation, kill, attach, edit, and init.
+Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, add, launch, inheritance, hooks, validation, kill, attach, edit, and init.
 
 ## tmux Configuration
 
