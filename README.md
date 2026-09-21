@@ -21,7 +21,8 @@ source ~/.bashrc  # or source ~/.zshrc
 ## Usage
 
 ```
-tmux-ws create <name> [--detach|-d] [--force|-f]  Create and attach to a workspace
+tmux-ws add <name> [dir] [--template <name>]  Scaffold workspace config
+tmux-ws launch <name> [--detach|-d]           Create and attach to a workspace
 tmux-ws attach <name>                 Attach to a running workspace
 tmux-ws list                          List available and running workspaces
 tmux-ws kill <name>                   Kill a workspace session
@@ -34,11 +35,17 @@ tmux-ws help                          Show help
 ### Examples
 
 ```bash
-# Create a workspace and attach
-tmux-ws create project
+# Scaffold a new workspace config from template
+tmux-ws add myproject
+
+# Scaffold with a custom project directory
+tmux-ws add myproject ~/projects/myapp
+
+# Create workspace and attach
+tmux-ws launch project
 
 # Create in background, stay in current shell
-tmux-ws create project --detach
+tmux-ws launch project --detach
 
 # Attach to a running workspace
 tmux-ws attach project
@@ -145,20 +152,21 @@ Hooks run in a subshell, so they cannot modify the script's state (WINDOWS, DEFA
 
 ## Creating a New Workspace
 
-Copy an existing workspace or the example:
+Use `add` to scaffold a workspace config from a template:
 
-```bash
-# From the example
-cp -r ~/.config/tmux-ws/_examples ~/.config/tmux-ws/myproject
+    # Scaffold with defaults
+    tmux-ws add myproject
 
-# From an existing workspace
-cp -r ~/.config/tmux-ws/project ~/.config/tmux-ws/myproject
+    # Scaffold with a specific project directory
+    tmux-ws add myproject ~/projects/myapp
 
-# Edit it
-tmux-ws edit myproject
-```
+    # Edit the config
+    tmux-ws edit myproject
 
-Directories starting with `_` (like `_templates`, `_examples`) are hidden from `tmux-ws list` but still usable with `tmux-ws create`.
+Or copy an existing workspace manually:
+
+    cp -r ~/.config/tmux-ws/project ~/.config/tmux-ws/myproject
+    tmux-ws edit myproject
 
 ## Testing
 
@@ -166,7 +174,7 @@ Directories starting with `_` (like `_templates`, `_examples`) are hidden from `
 make test
 ```
 
-Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, create, inheritance, hooks, validation, kill, attach, edit, and init.
+Requires [bats](https://github.com/bats-core/bats-core). Tests cover: help, version, list, add, launch, inheritance, hooks, validation, kill, attach, edit, and init.
 
 ## tmux Configuration
 

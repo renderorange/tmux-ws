@@ -20,6 +20,14 @@ setup() {
     mkdir -p "$TEST_CONFIG_DIR/bad-format"
     mkdir -p "$TEST_CONFIG_DIR/no-template/hooks"
     mkdir -p "$TEST_CONFIG_DIR/fail-hook/hooks"
+    cat > "$TEST_CONFIG_DIR/_templates/node.conf" <<EOF
+DEFAULT_DIR="$BATS_TEST_TMPDIR/node-default"
+WINDOWS=(
+    "editor::vim"
+    "server::npm start"
+    "shell::"
+)
+EOF
 
     # Default template
     cat > "$TEST_CONFIG_DIR/_templates/default.conf" <<EOF
@@ -166,22 +174,22 @@ teardown() {
     [[ "${output}" == *"Running sessions"* ]]
 }
 
-# --- Create ---
+# --- Launch ---
 
-@test "create requires a name" {
-    run tmux-ws create
+@test "launch requires a name" {
+    run tmux-ws launch
     [ "$status" -eq 1 ]
     [[ "${output}" == *"Workspace name required"* ]]
 }
 
-@test "create fails for nonexistent workspace" {
-    run tmux-ws create nonexistent --detach
+@test "launch fails for nonexistent workspace" {
+    run tmux-ws launch nonexistent --detach
     [ "$status" -eq 1 ]
     [[ "${output}" == *"not found"* ]]
 }
 
-@test "create builds workspace from config" {
-    run tmux-ws create test-workspace --detach
+@test "launch builds workspace from config" {
+    run tmux-ws launch test-workspace --detach
     [ "$status" -eq 0 ]
     [[ "${output}" == *"created with 3 windows"* ]]
 
@@ -194,20 +202,20 @@ teardown() {
     [[ "${output}" == *"shell"* ]]
 }
 
-@test "create runs pre-create hook" {
-    run tmux-ws create test-workspace --detach
+@test "launch runs pre-create hook" {
+    run tmux-ws launch test-workspace --detach
     [ "$status" -eq 0 ]
     [ -f "$TEST_CONFIG_DIR/_hook_ran" ]
 }
 
-@test "create runs post-create hook" {
-    run tmux-ws create test-workspace --detach
+@test "launch runs post-create hook" {
+    run tmux-ws launch test-workspace --detach
     [ "$status" -eq 0 ]
     [ -f "$TEST_CONFIG_DIR/_hook_ran_post" ]
 }
 
-@test "create with inheritance" {
-    run tmux-ws create myapp --detach
+@test "launch with inheritance" {
+    run tmux-ws launch myapp --detach
     [ "$status" -eq 0 ]
     [[ "${output}" == *"created with 2 windows"* ]]
 
@@ -216,36 +224,81 @@ teardown() {
     [[ "${output}" == *"terminal"* ]]
 }
 
-@test "create --force kills existing session" {
+@test "launch reattaches to existing session" {
     tmux new-session -d -s test-workspace
-    run tmux-ws create test-workspace --detach --force
-    [ "$status" -eq 0 ]
-    [[ "${output}" == *"Killing existing session"* ]]
-}
-
-@test "create reattaches to existing session without --force" {
-    tmux new-session -d -s test-workspace
-    run tmux-ws create test-workspace --detach
+    run tmux-ws launch test-workspace --detach
     [ "$status" -eq 0 ]
     [[ "${output}" == *"already exists"* ]]
 }
 
-# --- Validation ---
+# --- Add ---
 
-@test "create fails for malformed window entry" {
-    run tmux-ws create bad-format --detach
+@test "add requires a name" {
+    run tmux-ws add
     [ "$status" -eq 1 ]
-    [[ "${output}" == *"invalid format"* ]]
+    [[ "${output}" == *"Workspace name required"* ]]
 }
 
-@test "create fails for missing _BASE template" {
-    run tmux-ws create no-template --detach
+@test "add scaffolds config from default template" {
+    run tmux-ws add new-project
+    [ "$status" -eq 0 ]
+    [[ "${output}" == *"scaffolded"* ]]
+
+    [ -f "$TEST_CONFIG_DIR/new-project/workspace.conf" ]
+    [ -d "$TEST_CONFIG_DIR/new-project/hooks" ]
+    [ -f "$TEST_CONFIG_DIR/new-project/hooks/pre-create.sh" ]
+    [ -f "$TEST_CONFIG_DIR/new-project/hooks/post-create.sh" ]
+}
+
+@test "add substitutes DEFAULT_DIR when dir arg given" {
+    run tmux-ws add new-project /tmp/custom-dir
+    [ "$status" -eq 0 ]
+
+    grep -qF 'DEFAULT_DIR="/tmp/custom-dir"' "$TEST_CONFIG_DIR/new-project/workspace.conf"
+}
+
+@test "add with --template uses specified template" {
+    run tmux-ws add node-project --template node
+    [ "$status" -eq 0 ]
+
+    [ -f "$TEST_CONFIG_DIR/node-project/workspace.conf" ]
+    grep -qF 'npm start' "$TEST_CONFIG_DIR/node-project/workspace.conf"
+}
+
+@test "add fails if config already exists" {
+    run tmux-ws add test-workspace
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"already exists"* ]]
+}
+
+@test "add fails for nonexistent template" {
+    run tmux-ws add new-project --template bogus
     [ "$status" -eq 1 ]
     [[ "${output}" == *"not found"* ]]
 }
 
-@test "create fails when hook fails" {
-    run tmux-ws create fail-hook --detach
+@test "add warns if dir arg does not exist" {
+    run tmux-ws add new-project /nonexistent/path
+    [ "$status" -eq 0 ]
+    [[ "${output}" == *"does not exist"* ]]
+}
+
+# --- Validation ---
+
+@test "launch fails for malformed window entry" {
+    run tmux-ws launch bad-format --detach
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"invalid format"* ]]
+}
+
+@test "launch fails for missing _BASE template" {
+    run tmux-ws launch no-template --detach
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"not found"* ]]
+}
+
+@test "launch fails when hook fails" {
+    run tmux-ws launch fail-hook --detach
     [ "$status" -eq 1 ]
     [[ "${output}" == *"hook failed"* ]]
 }
