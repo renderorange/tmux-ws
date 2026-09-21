@@ -21,7 +21,7 @@ usage() {
     echo -e ""
     echo -e "${BOLD}Usage:${NC}"
     echo -e "  $SCRIPT_NAME add <name> [dir] [--template <name>]  Scaffold workspace config"
-    echo -e "  $SCRIPT_NAME create <name> [--detach|-d]          Create and attach to workspace"
+    echo -e "  $SCRIPT_NAME launch <name> [--detach|-d]         Launch and attach to workspace"
     echo -e "  $SCRIPT_NAME attach <name>                         Attach to running workspace"
     echo -e "  $SCRIPT_NAME list                                  List available and running workspaces"
     echo -e "  $SCRIPT_NAME kill <name>                           Kill workspace session"
@@ -32,7 +32,6 @@ usage() {
     echo -e ""
     echo -e "${BOLD}Options:${NC}"
     echo -e "  --detach, -d       Launch workspace without attaching"
-    echo -e "  --force, -f        Kill existing session before creating"
     echo -e "  --template <name>  Use a specific template (default: default)"
     echo -e ""
     echo -e "${BOLD}Config:${NC}"
@@ -216,16 +215,14 @@ parse_window_entry() {
 }
 
 # --- Core Commands ---
-cmd_create() {
+cmd_launch() {
     local name=""
     local detach=false
-    local force=false
 
     # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --detach|-d) detach=true; shift ;;
-            --force|-f)  force=true; shift ;;
             -*)          error "Unknown option: $1"; usage; exit 1 ;;
             *)           name="$1"; shift ;;
         esac
@@ -242,18 +239,13 @@ cmd_create() {
 
     # Check if session already exists
     if tmux has-session -t "$name" 2>/dev/null; then
-        if [[ "$force" == true ]]; then
-            warn "Killing existing session '$name'"
-            tmux kill-session -t "$name"
+        info "Session '$name' already exists"
+        if [[ "$detach" == true ]]; then
+            echo "  Attach with: tmux attach -t $name"
         else
-            info "Session '$name' already exists"
-            if [[ "$detach" == true ]]; then
-                echo "  Attach with: tmux attach -t $name"
-            else
-                tmux attach -t "$name"
-            fi
-            return
+            tmux attach -t "$name"
         fi
+        return
     fi
 
     # Run pre-create hooks
@@ -420,7 +412,7 @@ cmd_attach() {
 
     if ! tmux has-session -t "$name" 2>/dev/null; then
         error "Session '$name' is not running"
-        echo "  Create it with: $SCRIPT_NAME create $name"
+        echo "  Create it with: $SCRIPT_NAME launch $name"
         exit 1
     fi
 
@@ -498,7 +490,7 @@ main() {
 
     case "$command" in
         add)     cmd_add "$@" ;;
-        create)  cmd_create "$@" ;;
+        launch)  cmd_launch "$@" ;;
         attach)  cmd_attach "$@" ;;
         list)    cmd_list ;;
         kill)    cmd_kill "$@" ;;
