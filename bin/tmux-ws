@@ -99,6 +99,16 @@ validate_dir() {
 }
 
 # --- Config Loading ---
+resolve_template_path() {
+    local template_name="$1"
+    local template_file="$CONFIG_DIR/_templates/${template_name}.conf"
+    if [[ ! -f "$template_file" ]]; then
+        error "Template '$template_name' not found at $template_file"
+        exit 1
+    fi
+    echo "$template_file"
+}
+
 load_config() {
     local name="$1"
     local config_dir="$CONFIG_DIR/$name"
@@ -127,7 +137,8 @@ load_config() {
 
     # Inherit from base template if _BASE is set
     if [[ -n "$_BASE" ]]; then
-        local base_file="$CONFIG_DIR/_templates/${_BASE}.conf"
+        local base_file
+        base_file=$(resolve_template_path "$_BASE")
         if [[ -f "$base_file" ]]; then
             # Save workspace values
             local ws_windows=("${WINDOWS[@]+"${WINDOWS[@]}"}")
@@ -153,10 +164,6 @@ load_config() {
             if [[ "$DEFAULT_DIR" == "$HOME" && "$tmpl_default" != "$HOME" ]]; then
                 DEFAULT_DIR="$tmpl_default"
             fi
-        else
-            error "Base template '$_BASE' not found at $base_file"
-            error "  Create it with: $SCRIPT_NAME init"
-            exit 1
         fi
     fi
 
