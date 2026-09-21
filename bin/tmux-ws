@@ -20,18 +20,19 @@ usage() {
     echo -e "${BOLD}$SCRIPT_NAME${NC} — tmux workspace manager"
     echo -e ""
     echo -e "${BOLD}Usage:${NC}"
-    echo -e "  $SCRIPT_NAME create <name> [--detach|-d]  Create and attach to a workspace"
-    echo -e "  $SCRIPT_NAME attach <name>               Attach to a running workspace"
-    echo -e "  $SCRIPT_NAME list                         List available and running workspaces"
-    echo -e "  $SCRIPT_NAME kill <name>                  Kill a workspace session"
-    echo -e "  $SCRIPT_NAME edit <name>                  Open workspace config in \$EDITOR"
-    echo -e "  $SCRIPT_NAME init                         Create config directory structure"
-    echo -e "  $SCRIPT_NAME version                      Show version"
-    echo -e "  $SCRIPT_NAME help                         Show this help"
+    echo -e "  $SCRIPT_NAME add <name> [dir] [--template <name>]  Scaffold workspace config"
+    echo -e "  $SCRIPT_NAME launch <name> [--detach|-d]           Create and attach to workspace"
+    echo -e "  $SCRIPT_NAME attach <name>                         Attach to running workspace"
+    echo -e "  $SCRIPT_NAME list                                  List available and running workspaces"
+    echo -e "  $SCRIPT_NAME kill <name>                           Kill workspace session"
+    echo -e "  $SCRIPT_NAME edit <name>                           Open workspace config in \$EDITOR"
+    echo -e "  $SCRIPT_NAME init                                  Create config directory structure"
+    echo -e "  $SCRIPT_NAME version                               Show version"
+    echo -e "  $SCRIPT_NAME help                                  Show this help"
     echo -e ""
     echo -e "${BOLD}Options:${NC}"
-    echo -e "  --detach, -d    Create workspace without attaching"
-    echo -e "  --force, -f     Kill existing session before creating"
+    echo -e "  --detach, -d       Launch workspace without attaching"
+    echo -e "  --template <name>  Use a specific template (default: default)"
     echo -e ""
     echo -e "${BOLD}Config:${NC}"
     echo -e "  $CONFIG_DIR/<name>/workspace.conf"
@@ -294,6 +295,63 @@ cmd_create() {
     fi
 }
 
+cmd_add() {
+    local name=""
+    local dir=""
+    local template="default"
+
+    # Parse args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --template) template="$2"; shift 2 ;;
+            -*)         error "Unknown option: $1"; usage; exit 1 ;;
+            *)          if [[ -z "$name" ]]; then name="$1"; else dir="$1"; fi; shift ;;
+        esac
+    done
+
+    if [[ -z "$name" ]]; then
+        error "Workspace name required"
+        usage
+        exit 1
+    fi
+
+    local config_file="$CONFIG_DIR/$name/workspace.conf"
+    if [[ -f "$config_file" ]]; then
+        error "Workspace '$name' already exists at $config_file"
+        exit 1
+    fi
+
+    # Resolve and validate template
+    local template_file
+    template_file=$(resolve_template_path "$template")
+
+    # Create workspace directory
+    mkdir -p "$CONFIG_DIR/$name/hooks"
+
+    # Copy template and substitute DEFAULT_DIR if dir arg given
+    if [[ -n "$dir" ]]; then
+        sed "s|^DEFAULT_DIR=.*|DEFAULT_DIR=\"$dir\"|" "$template_file" > "$config_file"
+        validate_dir "$dir" "Workspace directory"
+    else
+        cp "$template_file" "$config_file"
+    fi
+
+    # Create hook stubs
+    cat > "$CONFIG_DIR/$name/hooks/pre-create.sh" <<'STUB'
+#!/bin/bash
+# Runs before the tmux session is created.
+# Use this to start services, check prerequisites, etc.
+STUB
+
+    cat > "$CONFIG_DIR/$name/hooks/post-create.sh" <<'STUB'
+#!/bin/bash
+# Runs after the tmux session is created.
+# Use this to wait for services, open URLs, send notifications, etc.
+STUB
+
+    info "Workspace '$name' scaffolded at $CONFIG_DIR/$name/"
+}
+
 cmd_list() {
     header "Available workspaces"
     local count=0
@@ -438,6 +496,7 @@ main() {
     shift
 
     case "$command" in
+        add)     cmd_add "$@" ;;
         create)  cmd_create "$@" ;;
         attach)  cmd_attach "$@" ;;
         list)    cmd_list ;;

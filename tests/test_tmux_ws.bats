@@ -20,6 +20,14 @@ setup() {
     mkdir -p "$TEST_CONFIG_DIR/bad-format"
     mkdir -p "$TEST_CONFIG_DIR/no-template/hooks"
     mkdir -p "$TEST_CONFIG_DIR/fail-hook/hooks"
+    cat > "$TEST_CONFIG_DIR/_templates/node.conf" <<EOF
+DEFAULT_DIR="$BATS_TEST_TMPDIR/node-default"
+WINDOWS=(
+    "editor::vim"
+    "server::npm start"
+    "shell::"
+)
+EOF
 
     # Default template
     cat > "$TEST_CONFIG_DIR/_templates/default.conf" <<EOF
@@ -228,6 +236,58 @@ teardown() {
     run tmux-ws create test-workspace --detach
     [ "$status" -eq 0 ]
     [[ "${output}" == *"already exists"* ]]
+}
+
+# --- Add ---
+
+@test "add requires a name" {
+    run tmux-ws add
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"Workspace name required"* ]]
+}
+
+@test "add scaffolds config from default template" {
+    run tmux-ws add new-project
+    [ "$status" -eq 0 ]
+    [[ "${output}" == *"scaffolded"* ]]
+
+    [ -f "$TEST_CONFIG_DIR/new-project/workspace.conf" ]
+    [ -d "$TEST_CONFIG_DIR/new-project/hooks" ]
+    [ -f "$TEST_CONFIG_DIR/new-project/hooks/pre-create.sh" ]
+    [ -f "$TEST_CONFIG_DIR/new-project/hooks/post-create.sh" ]
+}
+
+@test "add substitutes DEFAULT_DIR when dir arg given" {
+    run tmux-ws add new-project /tmp/custom-dir
+    [ "$status" -eq 0 ]
+
+    grep -qF 'DEFAULT_DIR="/tmp/custom-dir"' "$TEST_CONFIG_DIR/new-project/workspace.conf"
+}
+
+@test "add with --template uses specified template" {
+    run tmux-ws add node-project --template node
+    [ "$status" -eq 0 ]
+
+    [ -f "$TEST_CONFIG_DIR/node-project/workspace.conf" ]
+    grep -qF 'npm start' "$TEST_CONFIG_DIR/node-project/workspace.conf"
+}
+
+@test "add fails if config already exists" {
+    run tmux-ws add test-workspace
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"already exists"* ]]
+}
+
+@test "add fails for nonexistent template" {
+    run tmux-ws add new-project --template bogus
+    [ "$status" -eq 1 ]
+    [[ "${output}" == *"not found"* ]]
+}
+
+@test "add warns if dir arg does not exist" {
+    run tmux-ws add new-project /nonexistent/path
+    [ "$status" -eq 0 ]
+    [[ "${output}" == *"does not exist"* ]]
 }
 
 # --- Validation ---
