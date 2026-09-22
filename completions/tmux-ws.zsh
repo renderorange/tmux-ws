@@ -4,7 +4,7 @@
 
 _tmux_ws() {
     local config_dir="${TMUX_WS_CONFIG:-$HOME/.config/tmux-ws}"
-    local subcommands=(create attach list kill edit init help version)
+    local subcommands=(add launch attach list kill edit init help version)
 
     _arguments -C \
         '1:subcommand:->subcommand' \
@@ -17,7 +17,7 @@ _tmux_ws() {
             ;;
         workspace)
             case $words[2] in
-                create|attach|kill|edit)
+                add|launch|attach|kill|edit)
                     local -a workspaces
                     for dir in "$config_dir"/*/; do
                         [[ ! -f "$dir/workspace.conf" ]] && continue
